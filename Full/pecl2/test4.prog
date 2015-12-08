@@ -1,0 +1,18 @@
+VADECL
+	id,id2,id3 -> INTAGER
+	id4,id5,id6 ...; BOOLEAN
+	cont, 1asd = integer
+END;
+
+funcion $nombre1 a1 (boolean), b# (integer)
+	id3 = 4 + ?
+	// Comentario ¿?
+	return true
+
+function $nombre2 ((9)
+	return PROGRAM;
+
+	return true;
+
+BeGIn
+	==$nombre2(id) 2;

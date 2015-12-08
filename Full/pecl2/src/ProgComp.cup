@@ -1,0 +1,378 @@
+package pecl2;
+
+import java_cup.runtime.*;
+import java.io.*;
+import java.util.*;
+import java.lang.*;
+
+parser code
+{:
+    
+public static void main (String argv[]) throws Exception
+	{
+                
+		FileInputStream fich= new FileInputStream(argv[0] + ".prog");
+		
+                /* Creación y inicialización */
+                ProgCompCup aParser = new ProgCompCup(new ProgCompLex(fich));
+                /* Iniciar análisis */
+                aParser.parse();
+                		
+	}
+
+
+public void syntax_error(Symbol error_token){
+  report_error("Error sintáctico en la línea: " + error_token.left + ". En : " + error_token.value, error_token);
+}
+
+
+public void report_error(String message, Object info){
+  System.err.println(message);
+	}
+:}
+
+action code
+{:
+	private Hashtable<String, Identificador> mapaIdentG = new Hashtable<String, Identificador>();//Contexto global
+	private Hashtable<String, Identificador> mapaIdentAux = new Hashtable<String, Identificador>();//Contexto de la funcion (se superponen)
+    private Hashtable<String, Funcion> mapaFuncs = new Hashtable<String, Funcion>();
+:}
+
+terminal 		TK_PROGRAM, TK_END, TK_VARDECL, TK_FLECHA, TK_IDENT, TK_BOOLEAN, TK_INTEGER, TK_COMA, TK_TIPOBOOLEAN, TK_TIPOINTEGER, TK_BEGIN;
+terminal		TK_FUNCION, TK_NOMBRE, TK_IGUAL, TK_PARENTESIS1, TK_PARENTESIS2, TK_SUMA, TK_RESTA, TK_RETURN, TK_PUNTOCOMA;
+
+non terminal	program, body, decVariables, decFunciones, codigo, lineaDecVariables, conjIdentificadores, funcion, tipo, input;
+non terminal	argEntrada, cuerpoFunc, salida, llamadaFuncion, operaciones, asignacion, operando, operador, operacion, conjEntradas;
+
+precedence left     TK_FUNCION;
+
+start with program;
+
+program ::= TK_PROGRAM body {::}
+			| error {::};
+
+body ::= decVariables:mapaIdents {::} 
+		| decFunciones {::}
+		| codigo {::}
+		| decVariables body {::}
+		| decFunciones body {::}
+		| codigo body {::};
+			
+decVariables ::= TK_VARDECL lineaDecVariables:mapa TK_END TK_PUNTOCOMA {::}
+				| error {::};
+			
+lineaDecVariables ::= conjIdentificadores:listaNombres TK_FLECHA tipo:tipo TK_PUNTOCOMA
+					{:
+						if (!((ArrayList<String>)listaNombres).isEmpty()){
+							for (String nombre : ((ArrayList<String>)listaNombres)){
+								if(!(mapaIdentG.containsKey(nombre))){
+									Identificador i = new Identificador(nombre, (String)tipo);
+									mapaIdentG.put(nombre, i);
+								}
+								else{
+									System.err.println("Error semántico en la línea: "+ tipoleft+" Variable previamente declarada: "+(String)nombre);
+								}
+							}
+						}
+					:} 
+					| conjIdentificadores:listaNombres TK_FLECHA tipo:tipo TK_PUNTOCOMA lineaDecVariables 
+					{:
+						if (!((ArrayList<String>)listaNombres).isEmpty()){
+							for (String nombre : ((ArrayList<String>)listaNombres)){
+								if(!(mapaIdentG.containsKey(nombre))){
+									Identificador i = new Identificador(nombre, (String)tipo);
+									mapaIdentG.put(nombre, i);
+								}
+								else{
+									System.err.println("Error semántico en la línea: "+ tipoleft+" Variable previamente declarada: "+nombre);
+								}
+							}
+						}
+					:}
+					| error {::};
+
+conjIdentificadores ::= TK_IDENT:ident 
+						{:
+							ArrayList<String> listaNombres = new ArrayList<String>();
+							listaNombres.add((String)ident);
+							RESULT = listaNombres;
+						:} 
+						| TK_IDENT:ident TK_COMA conjIdentificadores:listaNombres 
+						{:
+							((ArrayList<String>)listaNombres).add((String)ident);
+							RESULT = listaNombres;
+						:}
+						| error 
+						{:
+							ArrayList<String> listaNombres = new ArrayList<String>();
+							RESULT = listaNombres;
+						:};
+					
+					
+					
+decFunciones ::= funcion decFunciones{::}
+			| funcion {::};
+			
+funcion ::= TK_FUNCION TK_NOMBRE:nombre argEntrada:entrada cuerpoFunc:lista salida:salida 
+		{:
+			mapaIdentAux = new Hashtable<String, Identificador>();
+			if(((String) nombre) != ""){
+				if(!((ArrayList<Identificador>) entrada).isEmpty()){
+					if(((String) salida) != ""){
+						Funcion f = new Funcion((String) nombre, (ArrayList<Identificador>) entrada, (String) salida);
+						mapaFuncs.put((String) nombre, f);
+					}
+				}			
+			}
+			else{
+			}
+		:}
+			| TK_FUNCION TK_NOMBRE:nombre salida:salida 
+			{:
+				mapaIdentAux = new Hashtable<String, Identificador>();
+				if(((String) nombre) != ""){
+					if(((String) salida) != ""){
+					//Para funciones de aridad cero y sin codigo en el cuerpo
+						Funcion f = new Funcion((String) nombre, new ArrayList<Identificador>(), (String) salida);
+						mapaFuncs.put((String) nombre, f);
+					}			
+				}
+			:}
+			| TK_FUNCION TK_NOMBRE:nombre cuerpoFunc:lista salida:salida 
+			{:
+			//Instacio un nuevo objeto mapaIdentAux para tirar el anterior, pero no es necesario 100%
+				mapaIdentAux = new Hashtable<String, Identificador>();
+				if(((String) nombre) != ""){
+					if(((String) salida) != ""){
+					//Para funciones de aridad cero
+						Funcion f = new Funcion((String) nombre, new ArrayList<Identificador>(), (String) salida);
+						mapaFuncs.put((String) nombre, f);
+					}			
+				}
+			:}
+			| TK_FUNCION TK_NOMBRE:nombre argEntrada:entrada salida:salida 
+			{:
+				mapaIdentAux = new Hashtable<String, Identificador>();
+				if(((String) nombre) != ""){
+					if(!((ArrayList<Identificador>) entrada).isEmpty()){
+						if(((String) salida) != ""){
+							if(mapaIdentAux.isEmpty()){
+								//Dará warnings el 100% de las veces
+								System.err.println("Warning: hay identificadores declarados no usados");
+							}
+							Funcion f = new Funcion((String) nombre, (ArrayList<Identificador>) entrada, (String) salida);	
+							mapaFuncs.put((String) nombre, f);
+						}
+					}			
+				}
+				else{
+				}
+			:};
+			
+argEntrada ::= TK_IDENT:id TK_PARENTESIS1 tipo:tipo TK_PARENTESIS2 
+			{:
+				ArrayList<Identificador> lista = new ArrayList<Identificador>();
+				Identificador i = new Identificador((String)id, (String)tipo);
+				lista.add(i);
+				mapaIdentAux.put(i.getNombre(),i);
+				RESULT = lista;
+			:}
+			| TK_IDENT:id TK_PARENTESIS1 tipo:tipo TK_PARENTESIS2 TK_COMA argEntrada:lista 
+			{:
+				Identificador i = new Identificador((String)id, (String)tipo);
+				((ArrayList<Identificador>)lista).add(i);
+				mapaIdentAux.put(i.getNombre(),i);
+				RESULT = lista;
+			:}
+			| error 
+			{:
+				ArrayList<Identificador> lista = new ArrayList<Identificador>();
+				RESULT = lista;
+			:};
+
+cuerpoFunc ::= operaciones {::};
+
+operaciones ::= operacion TK_PUNTOCOMA {::}
+			| operacion TK_PUNTOCOMA operaciones {::};
+		
+operacion ::= asignacion:tipo1 operando:tipo2 operador operando:tipo3 
+			{:
+			//Comprobemos que está bien
+				if (((String)tipo1 == (String)tipo2) && ((String)tipo3 == (String) tipo1)){
+					RESULT = (String)tipo1;
+				}
+				else{
+					System.err.println("Error semántico en la línea: "+ tipo1left + "  No hay concordancia de tipos");
+				}
+			:}
+			| asignacion:tipo1 operando:tipo2 operador operacion:tipos 
+			{:
+				if (((String)tipo1 == (String)tipo2) && ((String)tipos == (String) tipo1)){
+					RESULT = (String)tipo1;
+				}
+				else{
+					System.err.println("Error semántico en la línea: "+ tipo1left+" No hay concordancia de tipos");
+				}
+			:}
+			| asignacion:tipo1 operando:tipo2 
+			{:
+				if ((String)tipo1 == (String)tipo2 ){
+					RESULT = (String)tipo1;
+				}
+				else{
+					System.err.println("Error semántico en la línea: "+ tipo1left+"No hay concordancia de tipos");
+				}
+			:}
+			| error 
+			{::};
+			
+asignacion ::= TK_IDENT:ident TK_IGUAL 
+				{:
+				if(mapaIdentG.containsKey((String)ident)){
+					RESULT = mapaIdentG.get((String)ident).getTipo();
+				}	
+				else if (mapaIdentAux.containsKey((String)ident)){
+					RESULT = mapaIdentAux.get((String)ident).getTipo();
+				}	
+				else{
+					System.err.println("Error semántico en la línea: "+ identleft+" variable no declarada -> "+(String)ident);
+				}
+				:};
+			
+llamadaFuncion ::= TK_NOMBRE:nombre input:listaTipos 
+				{:
+				if(!(((ArrayList<String>) listaTipos).isEmpty())){
+					if(((ArrayList<String>) listaTipos).size() == mapaFuncs.get((String) nombre).getAridad()){
+						int i = 0;
+						for (String tipo : (ArrayList<String>) listaTipos){
+							if(tipo != mapaFuncs.get((String) nombre).getEntrada().get(i).getTipo()){
+								System.err.println("Error de tipos en la línea "+ nombreleft+" llamada a la función "+ (String) nombre);
+								RESULT = "";
+								break;
+							}
+							i++;
+						}
+						RESULT = mapaFuncs.get((String) nombre).getSalida();
+					}
+					else{
+						System.err.println("Error de aridad en la línea"+nombreleft+" en la llamada a la función "+ (String) nombre);
+					}
+					}
+				:};
+					
+input ::= TK_PARENTESIS1 conjEntradas:listaTipos TK_PARENTESIS2 {:RESULT = listaTipos;:};
+		
+conjEntradas ::= TK_IDENT:ident 
+				{:
+					ArrayList<String> l = new ArrayList<String>();
+					if(mapaIdentG.containsKey((String)ident)){
+						l.add(mapaIdentG.get((String)ident).getTipo());
+						RESULT = l;
+					}	
+					else if (mapaIdentAux.containsKey((String)ident)){
+						l.add(mapaIdentAux.get((String)ident).getTipo());
+						RESULT = l;
+					}	
+					else{
+						System.err.println("Error semántico en la línea: "+ identleft+" variable no declarada -> "+(String)ident);
+					}
+				:}
+				| TK_BOOLEAN 
+				{:
+					ArrayList<String> l = new ArrayList<String>();
+					l.add("Boolean");
+					RESULT=l;
+				:}
+				| TK_INTEGER 
+				{:
+					ArrayList<String> l = new ArrayList<String>();
+					l.add("Integer");
+					RESULT=l;
+				:}
+				| TK_IDENT:ident TK_COMA conjEntradas:l
+				{:
+					if(mapaIdentG.containsKey((String)ident)){
+						((ArrayList<String>)l).add(mapaIdentG.get((String)ident).getTipo());
+						RESULT = ((ArrayList<String>)l);
+					}	
+					else if (mapaIdentAux.containsKey((String)ident)){
+						((ArrayList<String>)l).add(mapaIdentAux.get((String)ident).getTipo());
+						RESULT = ((ArrayList<String>)l);
+					}	
+					else{
+						System.err.println("Error semántico en la línea: "+identleft+" variable no declarada -> "+(String)ident);
+					}
+				:}
+				| TK_BOOLEAN TK_COMA conjEntradas:l
+				{:
+					((ArrayList<String>)l).add("Boolean");
+					RESULT = ((ArrayList<String>)l);
+				:}
+				| TK_INTEGER TK_COMA conjEntradas:l
+				{:
+					((ArrayList<String>)l).add("Integer");
+					RESULT = ((ArrayList<String>)l);
+				:}
+				| error 
+				{:
+					ArrayList<String> l = new ArrayList<String>();
+					RESULT = ((ArrayList<String>)l);
+				:};
+				
+operando ::= TK_INTEGER
+			{:
+				RESULT = "Integer";
+			:}
+			| TK_BOOLEAN
+			{:
+				RESULT = "Boolean";
+			:}
+			| TK_IDENT:ident
+			{:
+				if(mapaIdentG.containsKey((String)ident)){
+					RESULT = mapaIdentG.get((String)ident).getTipo();
+				}
+				else if (mapaIdentAux.containsKey((String)ident)){
+					RESULT = mapaIdentAux.get((String)ident).getTipo();
+				}	
+				else{
+					System.err.println("Error semántico en la línea: "+identleft+" variable no declarada -> "+(String)ident);
+				}
+			:}
+			| llamadaFuncion:tipo 
+			{:
+				RESULT = (String)tipo;
+			:}
+			| TK_PARENTESIS1 operador operando:operando TK_PARENTESIS2 
+			{:
+				RESULT = (String)operando;
+			:}
+			| TK_PARENTESIS1 operando:operando TK_PARENTESIS2 
+			{:
+				RESULT = (String)operando;
+			:};
+			
+			
+operador ::= TK_SUMA {::}
+			| TK_RESTA {::}
+			| error {::};
+			
+tipo ::= TK_TIPOBOOLEAN 
+		{:
+			RESULT = "Boolean";
+		:}
+		| TK_TIPOINTEGER 
+		{:
+			RESULT = "Integer";
+		:}
+		| error 
+		{:
+			RESULT = "";
+		:};
+			
+salida ::= TK_RETURN operando:operando TK_PUNTOCOMA
+		{:
+			RESULT = operando;
+		:};
+
+codigo ::= TK_BEGIN operaciones TK_END TK_PUNTOCOMA{:mapaIdentAux = new Hashtable <String, Identificador>();//nos evitamos heredar identificadores declarados de forma no global:};

@@ -1,0 +1,26 @@
+PROGRA
+	id,id2,id3 -> INTEGER;
+	id4,id5,id6 -> BOOLEAN;
+	cont, 1asd -> integer;
+END
+
+funcion $nombre a1 (boolean), b# (integer)
+	id3 = 4 + b1;
+	// Comentario dentro de funcion
+	return true;
+
+function $nombre2 a2
+	return 4;
+###
+
+function nombre3
+/Mal comentado
+	retrun true;
+
+begin
+	//fichero de prueba PROGRAM
+	id3 = (6 + 6) - $nombre2(2);
+	id=$nombre2(4);
+	id4= $nombre1(false,2);
+	id7=$nombre2(id);
+END;
